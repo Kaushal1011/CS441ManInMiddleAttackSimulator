@@ -11,7 +11,7 @@ package helpers
  */
 class ComparableNode(val id: Int, val incoming_nodes_len: Int, val outgoing_node_len: Int,
                      val children_props_hash: List[Int], val properties: List[Int],
-                     val valuableData: Boolean, val graphType: String = "original") {
+                     val valuableData: Boolean, val graphType: String = "original")  extends Serializable {
 
   /**
    * This function is used to calculate the similarity between two nodes
