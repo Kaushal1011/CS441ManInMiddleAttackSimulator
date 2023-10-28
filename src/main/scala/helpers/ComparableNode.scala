@@ -31,15 +31,15 @@ class ComparableNode(val id: Int, val incoming_nodes_len: Int, val outgoing_node
     // Jaccard similarity for child properties
     val jaccardSimilarityChildProp =
       if (unionChildProp.isEmpty) 0.0
-      else intersectionChildProp.size.toDouble / unionChildProp.size.toDouble
+      else intersectionChildProp.size.toDouble / unionChildProp.distinct.size.toDouble
 
     // Jaccard similarity for properties
     val jaccardSimilarityProps =
       if (unionProps.isEmpty) 0.0
-      else intersectionProps.size.toDouble / unionProps.size.toDouble
+      else intersectionProps.size.toDouble / unionProps.distinct.size.toDouble
 
     // denominator logic: Number of non-zero unions
-    val denominator: Int = Seq(unionChildProp.size, unionProps.size).count(_ > 0)
+    val denominator: Int = Seq(unionChildProp.distinct.size, unionProps.distinct.size).count(_ > 0)
 
     val simScore =
       if (denominator == 0) 0.0

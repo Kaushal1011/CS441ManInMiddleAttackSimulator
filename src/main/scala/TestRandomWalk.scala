@@ -5,7 +5,7 @@ import org.apache.spark.rdd.RDD
 import scala.util.Random
 import org.apache.log4j.Logger
 
-object RandomWalk {
+object TestRandomWalk {
 
   val logger = Logger.getLogger(getClass.getName)
 

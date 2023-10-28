@@ -4,6 +4,7 @@ import org.apache.spark.graphx._
 import helpers.{ComparableEdge, ComparableNode, NodeDataParser}
 import scala.util.Random
 import org.apache.log4j.Logger
+import RandomWalk.RandomWalk.{vertexProgram, sendMessage, mergeMessage}
 
 
 object Main {
@@ -35,12 +36,12 @@ object Main {
       .map(line => Edge(NodeDataParser.parseEdgeData(line).srcId,NodeDataParser.parseEdgeData(line).dstId, NodeDataParser.parseEdgeData(line)))
 
 
-    val initialNodes =Array(1L)
+    val initialNodes =Array(1L, 5L, 10L, 15L, 20L, 33L, 56L, 100L)
 
     val nodesOGRDD: RDD[ComparableNode] = sc.textFile(nodeFileOG)
       .map(line => NodeDataParser.parseNodeData(line))
 
-    val originalGraph = nodesOGRDD.collect()
+    val originalGraph: Array[ComparableNode] = nodesOGRDD.collect()
 
     val graph = Graph(nodesRDD, edgeRDD)
 
@@ -61,7 +62,7 @@ object Main {
     val neighborsMap: Map[VertexId, Array[ComparableNode]] = neighborsWithAttrs.collect().toMap
 
     // Neighbour to visit, Attribute of the node, successful attacks, failed attacks
-    val initiaGraph: Graph[(Long, ComparableNode,Long,Long),ComparableEdge] = graph.mapVertices((id, e) => {
+    val initialGraph: Graph[(Long, ComparableNode,Long,Long),ComparableEdge] = graph.mapVertices((id, e) => {
       if (initialNodes.contains(id)) {
         val nbrs = neighborsMap.getOrElse(id, Array.empty[ComparableNode])
         if (nbrs.nonEmpty) {
@@ -84,63 +85,18 @@ object Main {
       "null"
     )
 
-    val pregelGraph = initiaGraph.pregel(
-      (Long.MaxValue, initialMessage , 0L, 0L ),
-      20,
-      EdgeDirection.Out)(
-
-      // Vertex Program
-      (id, oldValue, newValue) =>
-        {
-          if (newValue._1!=Long.MaxValue) {
-
-            // attr always stays the same
-            // number of sucessful attacks and failed attacks are updated
-            // based on similarity check and attack decision
-
-            println("id: " + id + " oldValue: " + oldValue + " newValue: " + newValue)
-
-            (newValue._1,oldValue._2,newValue._3,newValue._4)
-          }else{
-            (oldValue._1,oldValue._2,oldValue._3,oldValue._4)
-          }
-        },
-
-      triplet => {
-        if (triplet.srcAttr._1 != Long.MaxValue) {
-          if (triplet.srcAttr._1 == triplet.dstId.toInt) {
-
-            // Iterator((triplet.dstId, 0))
-            // Retrieve the neighbors of the source vertex
-
-            val neighbours = neighborsMap.getOrElse(triplet.dstId, Array.empty[ComparableNode])
-
-            // If there are neighbors, pick a random one
-            if (neighbours.nonEmpty) {
-              val randomNeighbour = neighbours(Random.nextInt(neighbours.length)).id
-              Iterator(
-                (triplet.dstId, (randomNeighbour,triplet.dstAttr._2.asInstanceOf[ComparableNode],triplet.dstAttr._3,triplet.dstAttr._4)),
-              )
-            } else {
-              Iterator.empty
-            }
-          }
-          else {
-            Iterator.empty
-          }
-        } else {
-          Iterator.empty
-        }
-      },
-
-    (a, b) => {
-      val values = Seq(a, b)
-      values(Random.nextInt(values.size))
-    }
-
+    // Pregel function
+    val pregelGraph = initialGraph.pregel(
+      (Long.MaxValue, initialMessage, 0L, 0L),
+      50,
+      EdgeDirection.Out
+    )(
+      vertexProgram(originalGraph),
+      triplet => sendMessage(triplet, neighborsMap),  // Assuming neighborsMap is already defined.
+      mergeMessage
     )
 
-
+    pregelGraph.vertices.collect().foreach(println)
 
     // Stop SparkSession
     spark.stop()
