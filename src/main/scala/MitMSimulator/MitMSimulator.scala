@@ -1,7 +1,8 @@
 package MitMSimulator
 import helpers.ComparableNode
 import scala.util.Random
-
+import com.typesafe.config.ConfigFactory
+import Utilz.ConfigReader
 
 object MitMSimulator {
 
@@ -10,7 +11,12 @@ object MitMSimulator {
   // attack not success not fail when sim over thres, node ids diff
 
   // returns if attacked or not, attack sucessful or not, attack failed or not
-  private def attack(currAttr: ComparableNode, attrInOriginal: ComparableNode, successfulAttacks: Long, failedAttacks: Long): (Boolean, Long, Long) = {
+
+  val config = ConfigFactory.load()
+  val mitmSimConfig = ConfigReader.getMitMSimConfig(config)
+
+
+  private def attack(currAttr: ComparableNode, attrInOriginal: ComparableNode, successfulAttacks: Long, failedAttacks: Long, misIdentified:Long, uneventful:Long): (Boolean, Long, Long, Long, Long) = {
 
     val sim = currAttr.SimRankFromJaccardSimilarity(attrInOriginal)
     // attack based on probability 0.5 is succ = failed =0
@@ -18,19 +24,13 @@ object MitMSimulator {
     // 0.75 if succ > failed
     // 0.2 if succ > failed
 
-    if (currAttr.id == 33){
-      println(s"sim 33: $sim")
-    }
-
-    if (0.8 < sim) {
-      println(s"sim: $sim")
-      println("We attacking")
+    if (mitmSimConfig.mitmConfig.similarityThreshold < sim) {
       // Determine attack probability based on attack history
       val attackProb = (successfulAttacks, failedAttacks) match {
-        case (0, 0) => 0.9
-        case _ if successfulAttacks == failedAttacks => 0.8
-        case _ if successfulAttacks > failedAttacks => 0.95
-        case _ => 0.1
+        case (0, 0) => mitmSimConfig.mitmConfig.initCase
+        case _ if successfulAttacks == failedAttacks => mitmSimConfig.mitmConfig.sucEqFail
+        case _ if successfulAttacks > failedAttacks => mitmSimConfig.mitmConfig.sucGtFail
+        case _ => mitmSimConfig.mitmConfig.sucLtFail
       }
 
       // Decide whether to attack or not based on the determined probability
@@ -38,45 +38,49 @@ object MitMSimulator {
         if (currAttr.id == attrInOriginal.id && currAttr.valuableData) {
           // Attack successful
 //          print("Attack successful for 33")
-          return (true, successfulAttacks + 1, failedAttacks)
+          return (true, successfulAttacks + 1, failedAttacks, misIdentified, uneventful)
         } else if (currAttr.id != attrInOriginal.id && attrInOriginal.valuableData) {
           // Attack failed
-          return (true, successfulAttacks, failedAttacks + 1)
-        } else {
+          return (true, successfulAttacks, failedAttacks + 1,misIdentified, uneventful)
+        } else if (currAttr.id != attrInOriginal.id){
           // Attack neither successful nor failed
-          return (false, successfulAttacks, failedAttacks)
+          return (false, successfulAttacks, failedAttacks,misIdentified + 1, uneventful)
+        }
+        else {
+          // Attack neither successful nor failed
+          return (false, successfulAttacks, failedAttacks, misIdentified , uneventful + 1)
         }
       }else{
         // we dont attack
-        return (false, successfulAttacks, failedAttacks )
+        return (false, successfulAttacks, failedAttacks, misIdentified, uneventful)
       }
 
     }
     else {
       // Dint attack
-      return (false, successfulAttacks, failedAttacks)
+      return (false, successfulAttacks, failedAttacks, misIdentified, uneventful)
     }
   }
 
-  def attackingOriginalGraph(currAttr: ComparableNode, originalGraph: Array[ComparableNode], successfulAttacks: Long, failedAttacks: Long): (Long, Long) = {
+  def attackingOriginalGraph(currAttr: ComparableNode, originalGraph: Array[ComparableNode], successfulAttacks: Long, failedAttacks: Long, misIdentifiedAttacks: Long, uneventfulattacks: Long): (Long, Long, Long, Long) = {
 
     // Initial state
-    val initialState = (false, successfulAttacks, failedAttacks) // The first element of the tuple is a flag to indicate if an attack was made
+    val initialState = (false, successfulAttacks, failedAttacks, misIdentifiedAttacks, uneventfulattacks) // The first element of the tuple is a flag to indicate if an attack was made
 
-    val (attackMade, finalSuccessful, finalFailed) = originalGraph.foldLeft(initialState) {
-      case ((true, successful, failed), _) => // If an attack was already made, just propagate the same state without calling attack function again
-        (true, successful, failed)
+    val (attackMade, finalSuccessful, finalFailed, finalMisIdentified, finalUneventful) = originalGraph.foldLeft(initialState) {
+      case ((true, successful, failed, miss, unevent), _) => // If an attack was already made, just propagate the same state without calling attack function again
+        (true, successful, failed, miss, unevent)
 
-      case ((false, successful, failed), node) =>
-        val (attacked, newSuccessful, newFailed) = attack(currAttr, node, successful, failed)
+      case ((false, successful, failed, miss, unevent), node) =>
+        val (attacked, newSuccessful, newFailed, newMiss, newUnevent) = attack(currAttr, node, successful, failed, miss, unevent)
 
         if (attacked)
-          (true, newSuccessful, newFailed)
+          (true, newSuccessful, newFailed, newMiss, newUnevent)
         else
-          (false, newSuccessful, newFailed)
+          (false, newSuccessful, newFailed, newMiss, newUnevent)
     }
 
-    (finalSuccessful, finalFailed)
+    (finalSuccessful, finalFailed, finalMisIdentified, finalUneventful)
   }
 
 }
