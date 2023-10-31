@@ -6,11 +6,12 @@ import scala.util.Random
 import helpers.ComparableNode
 import MitMSimulator.MitMSimulator.attackingOriginalGraph
 import org.apache.log4j.Logger
+import org.apache.spark.broadcast.Broadcast
 
 object RandomWalk {
   val logger: Logger = Logger.getLogger("CS441HW2MitM")
 
-  def vertexProgram(originalGraph: Array[ComparableNode]): (VertexId, (Long, ComparableNode, Long, Long, Long, Long, Long), (Long, ComparableNode, Long, Long, Long, Long, Long)) => (Long, ComparableNode, Long, Long, Long, Long, Long) = {
+  def vertexProgram(originalGraph: Broadcast[Array[ComparableNode]]): (VertexId, (Long, ComparableNode, Long, Long, Long, Long, Long), (Long, ComparableNode, Long, Long, Long, Long, Long)) => (Long, ComparableNode, Long, Long, Long, Long, Long) = {
     (id, oldValue, newValue) => {
       // attr always stays the same
       // number of sucessful attacks and failed attacks are updated
@@ -24,16 +25,16 @@ object RandomWalk {
       // _6 is uneventful attacks
 
       if (newValue._1 != Long.MaxValue) {
-        val (newSuccessful, newFailed, newMissidentified , newUneventful) = attackingOriginalGraph(newValue._2, originalGraph, oldValue._3, oldValue._4, oldValue._5, oldValue._6)
+        val (newSuccessful, newFailed, newMissidentified , newUneventful) = attackingOriginalGraph(newValue._2, originalGraph.value, oldValue._3, oldValue._4, oldValue._5, oldValue._6)
         (newValue._1, oldValue._2, newSuccessful, newFailed, newMissidentified, newUneventful, newValue._7)
 
       } else oldValue
     }
   }
 
-  def sendMessage(triplet: EdgeTriplet[(Long, ComparableNode, Long, Long, Long, Long, Long), _], neighborsMap: Map[VertexId, Array[ComparableNode]]): Iterator[(VertexId, (Long, ComparableNode, Long, Long, Long, Long, Long))] = {
+  def sendMessage(triplet: EdgeTriplet[(Long, ComparableNode, Long, Long, Long, Long, Long), _], neighborsMap: Broadcast[Map[VertexId, Array[ComparableNode]]]): Iterator[(VertexId, (Long, ComparableNode, Long, Long, Long, Long, Long))] = {
     if (triplet.srcAttr._1 != Long.MaxValue && triplet.srcAttr._1 == triplet.dstId) {
-      val neighbours = neighborsMap.getOrElse(triplet.dstId, Array.empty[ComparableNode])
+      val neighbours = neighborsMap.value.getOrElse(triplet.dstId, Array.empty[ComparableNode])
       if (neighbours.nonEmpty) {
         val randomNeighbour = neighbours(Random.nextInt(neighbours.length)).id
         logger.info(s"Message Passed,${triplet.srcId},${triplet.dstId},${triplet.srcAttr._7}")

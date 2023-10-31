@@ -3,11 +3,13 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.util.LongAccumulator
 import org.apache.spark.graphx._
 import helpers.{ComparableEdge, ComparableNode, NodeDataParser}
+
 import scala.util.Random
 import org.apache.log4j.Logger
-import RandomWalk.RandomWalk.{vertexProgram, sendMessage, mergeMessage}
+import RandomWalk.RandomWalk.{mergeMessage, sendMessage, vertexProgram}
 import com.typesafe.config.ConfigFactory
 import Utilz.ConfigReader
+import org.apache.spark.broadcast.Broadcast
 object Main {
   val logger: Logger = Logger.getLogger("CS441HW2MitM")
 
@@ -18,7 +20,7 @@ object Main {
   def main(args: Array[String]): Unit = {
     val spark = SparkSession.builder()
       .appName("GraphSim")
-      .master("local[4]") // Set master to local with 4 cores. Adjust as needed.
+     // .master("local[4]") // Set master to local with 4 cores. Adjust as needed. // comment this if using spark-submit
       .getOrCreate()
 
     val sc = spark.sparkContext
@@ -54,7 +56,7 @@ object Main {
     val nodesOGRDD: RDD[ComparableNode] = sc.textFile(nodeFileOG)
       .map(line => NodeDataParser.parseNodeData(line))
 
-    val originalGraph: Array[ComparableNode] = nodesOGRDD.collect()
+    val originalGraph: Broadcast[Array[ComparableNode]] = sc.broadcast(nodesOGRDD.collect())
 
     val graph = Graph(nodesRDD, edgeRDD)
 
@@ -72,7 +74,8 @@ object Main {
 
 
     // Convert it to a map for easy lookup
-    val neighborsMap: Map[VertexId, Array[ComparableNode]] = neighborsWithAttrs.collect().toMap
+    val neighborsMap = sc.broadcast(neighborsWithAttrs.collect().toMap)
+
 
     // Define accumulators for successful and failed attacks
     val successfulAttacks: LongAccumulator = sc.longAccumulator("Successful Attacks")
@@ -84,9 +87,9 @@ object Main {
 
       logger.info(s"Starting iteration, ${i}")
 
-      val initialNodes = nodesRDD.takeSample(withReplacement = false, num = initialNodeCount).map(_._1)
+      val initialNodes = sc.broadcast(nodesRDD.takeSample(withReplacement = false, num = initialNodeCount).map(_._1))
 
-      logger.info(s"Initial nodes, ${initialNodes.mkString(",")}")
+      logger.info(s"Initial nodes, ${initialNodes.value.mkString(",")}")
 
       // Pregel simulation
       val pregelGraph = runPregelSimulation(graph, neighborsMap, originalGraph, initialNodes)
@@ -111,7 +114,7 @@ object Main {
 
     val stats = Array(
       s"Total Successful Attacks: ${successfulAttacks.value}",
-      s"Total Failed Attacks: ${successfulAttacks.value}",
+      s"Total Failed Attacks: ${failedAttacks.value}",
       s"Total Missidentified Attacks: ${missidentifiedAttacks.value}",
       s"Total Uneventful Attacks: ${uneventfulAttacks.value}"
     )
@@ -123,17 +126,17 @@ object Main {
   }
 
   private def runPregelSimulation(
-                           graph: Graph[ComparableNode, ComparableEdge],
-                           neighborsMap: Map[VertexId, Array[ComparableNode]],
-                           originalGraph: Array[ComparableNode],
-                           initialNodes: Array[VertexId]
+                                   graph: Graph[ComparableNode, ComparableEdge],
+                                   neighborsMap: Broadcast[Map[VertexId, Array[ComparableNode]]],
+                                   originalGraph: Broadcast[Array[ComparableNode]],
+                                   initialNodes: Broadcast[Array[VertexId]]
                          ): Graph[(Long, ComparableNode, Long, Long, Long, Long, Long), ComparableEdge] = {
 
     val initialGraph: Graph[(Long, ComparableNode, Long, Long, Long, Long, Long), ComparableEdge] = graph.mapVertices((id, e) => {
 
 
-      if (initialNodes.contains(id)) {
-        val nbrs = neighborsMap.getOrElse(id, Array.empty[ComparableNode])
+      if (initialNodes.value.contains(id)) {
+        val nbrs = neighborsMap.value.getOrElse(id, Array.empty[ComparableNode])
         if (nbrs.nonEmpty) {
           (nbrs(Random.nextInt(nbrs.length)).id, e, 0L, 0L,0L,0L,0L  )
         } else {
