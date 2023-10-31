@@ -14,7 +14,8 @@ object ConfigReader {
 
   case class SimConfig(
                         initNodesPercentage: Double,
-                        simIterations: Int
+                        simIterations: Int,
+                        walkLen: Int
                       )
 
   case class MitMSimConfig(
@@ -36,7 +37,8 @@ object ConfigReader {
       ),
       SimConfig(
         simConfig.getDouble("initNodesPercentage"),
-        simConfig.getInt("simIterations")
+        simConfig.getInt("simIterations"),
+        simConfig.getInt("walkLen")
       )
     )
   }

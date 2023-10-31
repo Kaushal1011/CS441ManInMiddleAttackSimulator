@@ -1,13 +1,16 @@
 package RandomWalk
 
 import org.apache.spark.graphx._
+
 import scala.util.Random
 import helpers.ComparableNode
 import MitMSimulator.MitMSimulator.attackingOriginalGraph
+import org.apache.log4j.Logger
 
 object RandomWalk {
+  val logger: Logger = Logger.getLogger("CS441HW2MitM")
 
-  def vertexProgram(originalGraph: Array[ComparableNode]): (VertexId, (Long, ComparableNode, Long, Long, Long, Long), (Long, ComparableNode, Long, Long, Long, Long)) => (Long, ComparableNode, Long, Long, Long, Long) = {
+  def vertexProgram(originalGraph: Array[ComparableNode]): (VertexId, (Long, ComparableNode, Long, Long, Long, Long, Long), (Long, ComparableNode, Long, Long, Long, Long, Long)) => (Long, ComparableNode, Long, Long, Long, Long, Long) = {
     (id, oldValue, newValue) => {
       // attr always stays the same
       // number of sucessful attacks and failed attacks are updated
@@ -22,17 +25,19 @@ object RandomWalk {
 
       if (newValue._1 != Long.MaxValue) {
         val (newSuccessful, newFailed, newMissidentified , newUneventful) = attackingOriginalGraph(newValue._2, originalGraph, oldValue._3, oldValue._4, oldValue._5, oldValue._6)
-        (newValue._1, oldValue._2, newSuccessful, newFailed, newMissidentified, newUneventful)
+        (newValue._1, oldValue._2, newSuccessful, newFailed, newMissidentified, newUneventful, newValue._7)
+
       } else oldValue
     }
   }
 
-  def sendMessage(triplet: EdgeTriplet[(Long, ComparableNode, Long, Long, Long, Long), _], neighborsMap: Map[VertexId, Array[ComparableNode]]): Iterator[(VertexId, (Long, ComparableNode, Long, Long, Long, Long))] = {
+  def sendMessage(triplet: EdgeTriplet[(Long, ComparableNode, Long, Long, Long, Long, Long), _], neighborsMap: Map[VertexId, Array[ComparableNode]]): Iterator[(VertexId, (Long, ComparableNode, Long, Long, Long, Long, Long))] = {
     if (triplet.srcAttr._1 != Long.MaxValue && triplet.srcAttr._1 == triplet.dstId) {
       val neighbours = neighborsMap.getOrElse(triplet.dstId, Array.empty[ComparableNode])
       if (neighbours.nonEmpty) {
         val randomNeighbour = neighbours(Random.nextInt(neighbours.length)).id
-        Iterator((triplet.dstId, (randomNeighbour, triplet.dstAttr._2, triplet.dstAttr._3, triplet.dstAttr._4, triplet.dstAttr._5, triplet.dstAttr._6)))
+        logger.info(s"Message Passed,${triplet.srcId},${triplet.dstId},${triplet.srcAttr._7}")
+        Iterator((triplet.dstId, (randomNeighbour, triplet.dstAttr._2, triplet.dstAttr._3, triplet.dstAttr._4, triplet.dstAttr._5, triplet.dstAttr._6, triplet.srcAttr._7 + 1)))
       } else {
         Iterator.empty
       }
@@ -41,7 +46,7 @@ object RandomWalk {
     }
   }
 
-  def mergeMessage(a: (Long, ComparableNode, Long, Long, Long, Long), b: (Long, ComparableNode, Long, Long, Long, Long)): (Long, ComparableNode, Long, Long, Long, Long) = {
+  def mergeMessage(a: (Long, ComparableNode, Long, Long, Long, Long, Long), b: (Long, ComparableNode, Long, Long, Long, Long, Long)): (Long, ComparableNode, Long, Long, Long, Long, Long) = {
     val values = Seq(a, b)
     values(Random.nextInt(values.size))
   }

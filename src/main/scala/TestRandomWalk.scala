@@ -4,7 +4,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.rdd.RDD
 import scala.util.Random
 import org.apache.log4j.Logger
-
+// This is a test program that showcases how the parallel walks were enabled on the graph!
 object TestRandomWalk {
 
   val logger = Logger.getLogger(getClass.getName)

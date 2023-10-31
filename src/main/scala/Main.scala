@@ -26,15 +26,20 @@ object Main {
     val config = ConfigFactory.load()
     val mitmSimConfig = ConfigReader.getMitMSimConfig(config)
 
-    val nodeFileOG = "./input/nodes.txt"
+    if (args.length < 4) {
+      logger.error("Expected arguments: <nodeFileOG> <nodeFilePath> <edgeFilePath> <outputFilePath>")
+      System.exit(1)
+    }
 
-    val nodeFilePath = "./input/nodesPerturbed.txt"
+    val nodeFileOG = args(0)
+    val nodeFilePath = args(1)
+    val edgeFilePath = args(2)
+    val outputFilePath = args(3)
 
     // Read the file and parse each line to create nodes
     val nodesRDD: RDD[(VertexId, ComparableNode)] = sc.textFile(nodeFilePath)
       .map(line => (NodeDataParser.parseNodeData(line).id, NodeDataParser.parseNodeData(line)))
 
-    val edgeFilePath = "./input/edgesPerturbed.txt"
 
     val edgeRDD: RDD[Edge[ComparableEdge]] = sc.textFile(edgeFilePath)
       .map(line => Edge(NodeDataParser.parseEdgeData(line).srcId, NodeDataParser.parseEdgeData(line).dstId, NodeDataParser.parseEdgeData(line)))
@@ -75,27 +80,44 @@ object Main {
     val missidentifiedAttacks: LongAccumulator = sc.longAccumulator("Missidentified Attacks")
     val uneventfulAttacks: LongAccumulator = sc.longAccumulator("Uneventful Attacks")
 
-    (1 to mitmSimConfig.simConfig.simIterations).foreach { _ =>
+    (1 to mitmSimConfig.simConfig.simIterations).foreach { i =>
+
+      logger.info(s"Starting iteration, ${i}")
 
       val initialNodes = nodesRDD.takeSample(withReplacement = false, num = initialNodeCount).map(_._1)
+
+      logger.info(s"Initial nodes, ${initialNodes.mkString(",")}")
 
       // Pregel simulation
       val pregelGraph = runPregelSimulation(graph, neighborsMap, originalGraph, initialNodes)
 
       // Accumulate successful and failed attacks
       pregelGraph.vertices.foreach {
-        case (_, (_, _, success, fail,misidentified,uneventful)) =>
+        case (_, (_, _, success, fail,misidentified,uneventful,_)) =>
           successfulAttacks.add(success)
           failedAttacks.add(fail)
           missidentifiedAttacks.add(misidentified)
           uneventfulAttacks.add(uneventful)
       }
+
+      logger.info(s"Finished iteration, ${i}")
+
     }
 
     println(s"Total Successful Attacks: ${successfulAttacks.value}")
     println(s"Total Failed Attacks: ${failedAttacks.value}")
     println(s"Total Missidentified Attacks: ${missidentifiedAttacks.value}")
     println(s"Total Uneventful Attacks: ${uneventfulAttacks.value}")
+
+    val stats = Array(
+      s"Total Successful Attacks: ${successfulAttacks.value}",
+      s"Total Failed Attacks: ${successfulAttacks.value}",
+      s"Total Missidentified Attacks: ${missidentifiedAttacks.value}",
+      s"Total Uneventful Attacks: ${uneventfulAttacks.value}"
+    )
+
+    sc.parallelize(stats).saveAsTextFile(outputFilePath)
+
     // Stop SparkSession
     spark.stop()
   }
@@ -105,20 +127,20 @@ object Main {
                            neighborsMap: Map[VertexId, Array[ComparableNode]],
                            originalGraph: Array[ComparableNode],
                            initialNodes: Array[VertexId]
-                         ): Graph[(Long, ComparableNode, Long, Long, Long, Long), ComparableEdge] = {
+                         ): Graph[(Long, ComparableNode, Long, Long, Long, Long, Long), ComparableEdge] = {
 
-    val initialGraph: Graph[(Long, ComparableNode, Long, Long, Long, Long), ComparableEdge] = graph.mapVertices((id, e) => {
+    val initialGraph: Graph[(Long, ComparableNode, Long, Long, Long, Long, Long), ComparableEdge] = graph.mapVertices((id, e) => {
 
 
       if (initialNodes.contains(id)) {
         val nbrs = neighborsMap.getOrElse(id, Array.empty[ComparableNode])
         if (nbrs.nonEmpty) {
-          (nbrs(Random.nextInt(nbrs.length)).id, e, 0L, 0L,0L,0L )
+          (nbrs(Random.nextInt(nbrs.length)).id, e, 0L, 0L,0L,0L,0L  )
         } else {
-          (Long.MaxValue, e, 0L, 0L,0L,0L)
+          (Long.MaxValue, e, 0L, 0L,0L,0L,0L)
         }
       } else {
-        (Long.MaxValue, e, 0L, 0L,0L,0L)
+        (Long.MaxValue, e, 0L, 0L,0L,0L,0L)
       }
     })
 
@@ -132,10 +154,15 @@ object Main {
       "null"
     )
 
+    val config = ConfigFactory.load()
+    val mitmSimConfig = ConfigReader.getMitMSimConfig(config)
+
     // Pregel function
     val pregelGraph = initialGraph.pregel(
-      (Long.MaxValue, initialMessage, 0L, 0L, 0L, 0L),
-      50,
+      (Long.MaxValue, initialMessage, 0L, 0L, 0L, 0L,0L),
+
+      mitmSimConfig.simConfig.walkLen,
+
       EdgeDirection.Out
     )(
       vertexProgram(originalGraph),
