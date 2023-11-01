@@ -49,9 +49,9 @@ The linked file contains a detailed overview of the algorithms used in this proj
     ```
 
    Arguments:
-    - `nodeFileOG`: Original node file path.
-    - `nodeFilePath`: Path to the file containing node data.
-    - `edgeFilePath`: Path to the file containing edge data.
+    - `nodeFileOG`: Original graph's node file path.
+    - `nodeFilePath`: Perturbed graph's node file path.
+    - `edgeFilePath`: Perturbed graph's edge file path.
     - `outputFilePath`: Path where the output stats will be saved.
 
 example run instructions:
