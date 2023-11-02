@@ -23,6 +23,7 @@ object RandomWalk {
       // _4 is number of failed attacks: should be 0 but if more attack with low probability
       // _5 is misidentified nodes but no valuable data
       // _6 is uneventful attacks
+      // _7 is number of supersteps
 
       if (newValue._1 != Long.MaxValue) {
         val (newSuccessful, newFailed, newMissidentified , newUneventful) = attackingOriginalGraph(newValue._2, originalGraph.value, oldValue._3, oldValue._4, oldValue._5, oldValue._6)
@@ -33,7 +34,9 @@ object RandomWalk {
   }
 
   def sendMessage(triplet: EdgeTriplet[(Long, ComparableNode, Long, Long, Long, Long, Long), _], neighborsMap: Broadcast[Map[VertexId, Array[ComparableNode]]]): Iterator[(VertexId, (Long, ComparableNode, Long, Long, Long, Long, Long))] = {
+    // only send message to one of the neighbors of the node that received the message
     if (triplet.srcAttr._1 != Long.MaxValue && triplet.srcAttr._1 == triplet.dstId) {
+      // pick a neighbour at random for the destination node, this will be processed in its vertex program
       val neighbours = neighborsMap.value.getOrElse(triplet.dstId, Array.empty[ComparableNode])
       if (neighbours.nonEmpty) {
         val randomNeighbour = neighbours(Random.nextInt(neighbours.length)).id
@@ -49,6 +52,7 @@ object RandomWalk {
 
   def mergeMessage(a: (Long, ComparableNode, Long, Long, Long, Long, Long), b: (Long, ComparableNode, Long, Long, Long, Long, Long)): (Long, ComparableNode, Long, Long, Long, Long, Long) = {
     val values = Seq(a, b)
+    // when we send multiple messages to the same node at a super step, just pick one of them
     values(Random.nextInt(values.size))
   }
 }

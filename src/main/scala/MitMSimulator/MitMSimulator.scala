@@ -23,6 +23,7 @@ object MitMSimulator {
     // 0.3 if succ == failed != 0
     // 0.75 if succ > failed
     // 0.2 if succ > failed
+    // The above are example probabilities, we can change them using the configuration file
 
     if (mitmSimConfig.mitmConfig.similarityThreshold < sim) {
       // Determine attack probability based on attack history

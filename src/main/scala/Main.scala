@@ -18,6 +18,8 @@ object Main {
   logger.info("This log will go to app_logs file")
 
   def main(args: Array[String]): Unit = {
+
+    // to run locally and not on cluster add .master("local[4]") to spark session builder
     val spark = SparkSession.builder()
       .appName("GraphSim")
      // .master("local[4]") // Set master to local with 4 cores. Adjust as needed. // comment this if using spark-submit
@@ -33,16 +35,20 @@ object Main {
       System.exit(1)
     }
 
+    // original nodes file
     val nodeFileOG = args(0)
+    // perturbed nodes file
     val nodeFilePath = args(1)
+    // perturbed edges file
     val edgeFilePath = args(2)
+    // output file
     val outputFilePath = args(3)
 
     // Read the file and parse each line to create nodes
     val nodesRDD: RDD[(VertexId, ComparableNode)] = sc.textFile(nodeFilePath)
       .map(line => (NodeDataParser.parseNodeData(line).id, NodeDataParser.parseNodeData(line)))
 
-
+    // Read the file and parse each line to create edges
     val edgeRDD: RDD[Edge[ComparableEdge]] = sc.textFile(edgeFilePath)
       .map(line => Edge(NodeDataParser.parseEdgeData(line).srcId, NodeDataParser.parseEdgeData(line).dstId, NodeDataParser.parseEdgeData(line)))
 
@@ -53,18 +59,23 @@ object Main {
     // Calculate 10% of the total nodes
     val initialNodeCount = (totalNodes * mitmSimConfig.simConfig.initNodesPercentage).toInt
 
+    // Read the original nodes file and parse each line to create nodes
     val nodesOGRDD: RDD[ComparableNode] = sc.textFile(nodeFileOG)
       .map(line => NodeDataParser.parseNodeData(line))
 
+    // Broadcast the original nodes so that each worker has a copy to access when it is doing the pregel simulation
     val originalGraph: Broadcast[Array[ComparableNode]] = sc.broadcast(nodesOGRDD.collect())
 
+    // perturbed graph for walks
     val graph = Graph(nodesRDD, edgeRDD)
 
     // First, identify the neighbors for each vertex
     val neighbors: RDD[(VertexId, Array[VertexId])] = graph.collectNeighborIds(EdgeDirection.Out)
 
+
     val vertexAttrs: RDD[(VertexId, ComparableNode)] = graph.vertices
 
+    // store neighbors with attributes for each id
     val neighborsWithAttrs: RDD[(VertexId, Array[ComparableNode])] = neighbors
       .flatMap { case (vertexId, arr) => arr.map(neighborId => (neighborId, vertexId)) }
       .join(vertexAttrs)
@@ -73,7 +84,7 @@ object Main {
       .mapValues(_.toArray)
 
 
-    // Convert it to a map for easy lookup
+    // Convert it to a map for easy lookup and broadcast it
     val neighborsMap = sc.broadcast(neighborsWithAttrs.collect().toMap)
 
 
@@ -132,6 +143,7 @@ object Main {
                                    initialNodes: Broadcast[Array[VertexId]]
                          ): Graph[(Long, ComparableNode, Long, Long, Long, Long, Long), ComparableEdge] = {
 
+    // create the initial graph selecting neighbours for only the initial nodes
     val initialGraph: Graph[(Long, ComparableNode, Long, Long, Long, Long, Long), ComparableEdge] = graph.mapVertices((id, e) => {
 
 
