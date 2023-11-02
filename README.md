@@ -1,7 +1,8 @@
 # CS441ManInMiddleAttackSimulator
 
+## [Video for project](https://youtu.be/GUwFFERfLxg?si=xwel5m9lZTI8BJ7L)
 
-# Random Walk with Man-in-the-Middle Attack Simulator
+The video explains and showcases what the program can do.
 
 ## Overview
 This project simulates random walks on graphs and incorporates a Man-in-the-Middle (MitM) attack simulator 
